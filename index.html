@@ -81,6 +81,12 @@
       color:var(--k-blue);
     }
 
+    /* Підсвітка обраного варіанту */
+    .option-picked{
+      border-color: rgba(0,152,70,.55) !important;
+      background: rgba(0,152,70,.08) !important;
+    }
+
     @keyframes pop {
       0%{ transform: scale(1); }
       50%{ transform: scale(1.01); }
@@ -93,7 +99,7 @@
 <body class="p-4 sm:p-8">
 <div id="app" class="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl p-6 sm:p-10 my-8">
 
-  <header class="text-center mb-10">
+  <header class="text-center mb-8">
     <div class="flex flex-col items-center gap-3">
       <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full"
            style="background: rgba(0,152,70,.10); border:1px solid rgba(0,152,70,.22); color: var(--k-blue);">
@@ -126,18 +132,48 @@
     </div>
   </header>
 
-  <div id="test-container" class="space-y-6"></div>
-
-  <div class="mt-8">
-    <button id="submit-button" onclick="calculateResults()"
-      class="w-full text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-300 transform hover:scale-[1.01] focus:outline-none btn-green pop">
-      Дізнатися результат
-    </button>
-    <p id="error-message" class="txt-red text-center mt-3 hidden font-medium">
-      Відповідай на всі запитання - я підсвітила ті, що пропущені.
-    </p>
+  <!-- Прогрес -->
+  <div id="progress-wrap" class="mb-6">
+    <div class="flex items-center justify-between gap-3 mb-2">
+      <p id="page-label" class="font-semibold txt-blue"></p>
+      <p id="answered-label" class="text-sm text-gray-600"></p>
+    </div>
+    <div class="w-full bg-gray-200 rounded-full h-2.5">
+      <div id="progress-bar" class="h-2.5 rounded-full" style="background: var(--k-green); width: 0%"></div>
+    </div>
   </div>
 
+  <div id="test-container" class="space-y-6"></div>
+
+  <!-- Навігація (липка) -->
+  <div class="mt-8 sticky bottom-3 z-10">
+    <div class="bg-white/90 backdrop-blur rounded-2xl p-3 shadow-lg border"
+         style="border-color: rgba(21,39,49,.15);">
+
+      <p id="error-message" class="txt-red text-center mb-3 hidden font-medium">
+        Є пропущені питання на цьому екрані - я підсвітила їх рамкою.
+      </p>
+
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button id="prev-btn" onclick="prevPage()"
+          class="w-full sm:w-auto px-5 py-3 rounded-xl btn-outline font-semibold">
+          ← Назад
+        </button>
+
+        <button id="next-btn" onclick="nextPage()"
+          class="w-full sm:flex-1 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-300 transform hover:scale-[1.01] focus:outline-none btn-green pop">
+          Далі →
+        </button>
+
+        <button id="submit-btn" onclick="calculateResults()"
+          class="w-full sm:flex-1 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-300 transform hover:scale-[1.01] focus:outline-none btn-green pop hidden">
+          Дізнатися результат
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Результати -->
   <div id="results-container" class="mt-12 pt-8 border-t-2 border-gray-200 hidden">
     <h2 class="text-2xl font-bold text-center txt-blue mb-6">Твій результат</h2>
 
@@ -246,6 +282,9 @@
 
   function emptyScores(){ return { crop:0, land:0, green:0, fin:0, acc:0, org:0, vet:0 }; }
 
+  // =========================
+  // 28 ПИТАНЬ (НЕ ЗАГУБЛЕНО)
+  // =========================
   const testData = [
     { q:"1. На шкільному ярмарку треба вирішити, що робити з ділянкою біля входу. Ти:",
       section:"Ти в дії",
@@ -311,7 +350,6 @@
         { text:"Прибуток.", score:{ fin:1 } },
         { text:"Здоров’я.", score:{ vet:1 } }
       ]},
-
     { q:"9. На фермі раптово захворіла тварина. Ти:",
       section:"Як у житті",
       options:[
@@ -408,7 +446,6 @@
         { text:"Аналізувати гроші й рішення.", score:{ fin:1 } },
         { text:"Керувати процесами і людьми.", score:{ org:1 } }
       ]},
-
     { q:"21. Твій стиль у команді:",
       section:"Фінал",
       options:[
@@ -475,59 +512,166 @@
       ]}
   ];
 
+  // =========================
+  // ПАГІНАЦІЯ (4 екрани по 7)
+  // =========================
+  const PER_PAGE = 7;
+  let page = 0;
+  const totalPages = Math.ceil(testData.length / PER_PAGE);
+  // answers[i] = index опції (0..3) або null
+  const answers = Array(testData.length).fill(null);
+
+  function pageRange(){
+    const start = page * PER_PAGE;
+    const end = Math.min(start + PER_PAGE, testData.length);
+    return { start, end };
+  }
+
+  function answeredCount(){
+    return answers.filter(v => v !== null).length;
+  }
+
+  function renderProgress(){
+    const { start, end } = pageRange();
+    const label = document.getElementById('page-label');
+    const answeredLabel = document.getElementById('answered-label');
+    const bar = document.getElementById('progress-bar');
+
+    label.textContent = `Екран ${page + 1} / ${totalPages} (питання ${start + 1}–${end} з ${testData.length})`;
+    answeredLabel.textContent = `Відповіді: ${answeredCount()} / ${testData.length}`;
+
+    const pct = Math.round((answeredCount() / testData.length) * 100);
+    bar.style.width = `${pct}%`;
+  }
+
+  function renderNavButtons(){
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const submitBtn = document.getElementById('submit-btn');
+
+    prevBtn.disabled = page === 0;
+    prevBtn.classList.toggle('opacity-50', page === 0);
+    prevBtn.classList.toggle('cursor-not-allowed', page === 0);
+
+    const last = page === totalPages - 1;
+    nextBtn.classList.toggle('hidden', last);
+    submitBtn.classList.toggle('hidden', !last);
+  }
+
   function renderQuestions(){
     const container = document.getElementById('test-container');
-    container.innerHTML = testData.map((item, index) => `
-      <div class="question-block p-5 bg-gray-50 rounded-xl shadow-md border-t-4"
-           style="border-top-color: var(--k-blue);" data-qindex="${index}">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-          <p class="font-semibold txt-blue text-lg">${item.q}</p>
-          <span class="text-xs text-gray-600">${item.section}</span>
-        </div>
+    const { start, end } = pageRange();
 
-        <div class="space-y-3">
-          ${item.options.map((opt, oi) => `
-            <label class="flex items-start p-3 bg-white border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition duration-150">
-              <input type="radio" name="q${index}" value="${oi}" class="mt-1 h-4 w-4">
-              <span class="ml-3 text-gray-800">${opt.text}</span>
-            </label>
-          `).join('')}
+    container.innerHTML = testData.slice(start, end).map((item, localIndex) => {
+      const i = start + localIndex; // глобальний індекс питання
+      const chosen = answers[i];
+
+      return `
+        <div class="question-block p-4 sm:p-5 bg-gray-50 rounded-2xl shadow-md border-t-4"
+             style="border-top-color: var(--k-blue);" data-qindex="${i}">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+            <p class="font-semibold txt-blue text-lg">${item.q}</p>
+            <span class="text-xs text-gray-600">${item.section}</span>
+          </div>
+
+          <div class="space-y-2.5">
+            ${item.options.map((opt, oi) => {
+              const checked = (chosen === oi) ? "checked" : "";
+              // якщо вже вибрано, то одразу підсвітка
+              const picked = (chosen === oi) ? "option-picked" : "";
+              return `
+                <label class="flex items-start gap-3 p-2.5 sm:p-3 bg-white border border-gray-200 rounded-2xl cursor-pointer
+                              hover:bg-gray-50 active:scale-[0.99] transition duration-150 ${picked}">
+                  <input type="radio" name="q${i}" value="${oi}" ${checked}
+                         class="mt-1 h-5 w-5 accent-[#009846]">
+                  <span class="text-gray-900 leading-snug">${opt.text}</span>
+                </label>
+              `;
+            }).join("")}
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join("");
+
+    renderProgress();
+    renderNavButtons();
   }
 
-  function calculateResults(){
-    const results = emptyScores();
-    const errorElement = document.getElementById('error-message');
+  // Підсвітка обраного варіанту + збереження відповіді
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.matches('input[type="radio"]')) {
+      const name = e.target.name;          // q{index}
+      const qIndex = Number(name.replace("q",""));
+      const optIndex = Number(e.target.value);
 
+      answers[qIndex] = optIndex;
+
+      document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+        r.closest('label')?.classList.remove('option-picked');
+      });
+      e.target.closest('label')?.classList.add('option-picked');
+
+      // якщо раніше було "missing", знімаємо
+      const block = document.querySelector(`.question-block[data-qindex="${qIndex}"]`);
+      block?.classList.remove('missing');
+
+      renderProgress();
+    }
+  });
+
+  function clearPageMissing(){
     document.querySelectorAll('.question-block').forEach(b => b.classList.remove('missing'));
-    const missingIndexes = [];
+  }
 
-    for (let i=0;i<testData.length;i++){
-      const selected = document.querySelector(`input[name="q${i}"]:checked`);
-      if(!selected){ missingIndexes.push(i); continue; }
-      const optIndex = Number(selected.value);
-      const scoreObj = testData[i].options[optIndex].score;
-      Object.keys(scoreObj).forEach(k => results[k] += scoreObj[k]);
+  function validateCurrentPage(){
+    const errorElement = document.getElementById('error-message');
+    clearPageMissing();
+
+    const { start, end } = pageRange();
+    const missing = [];
+    for (let i = start; i < end; i++){
+      if (answers[i] === null) missing.push(i);
     }
 
-    if(missingIndexes.length>0){
+    if (missing.length > 0){
       errorElement.classList.remove('hidden');
-      missingIndexes.forEach(i=>{
+      missing.forEach(i=>{
         const block = document.querySelector(`.question-block[data-qindex="${i}"]`);
-        if(block) block.classList.add('missing');
+        if (block) block.classList.add('missing');
       });
-      const first = document.querySelector(`.question-block[data-qindex="${missingIndexes[0]}"]`);
-      if(first) first.scrollIntoView({behavior:'smooth', block:'center'});
-      return;
+      const first = document.querySelector(`.question-block[data-qindex="${missing[0]}"]`);
+      first?.scrollIntoView({behavior:'smooth', block:'center'});
+      return false;
     } else {
       errorElement.classList.add('hidden');
+      return true;
     }
-
-    displayResults(results);
   }
 
+  function nextPage(){
+    if (!validateCurrentPage()) return;
+    if (page < totalPages - 1){
+      page++;
+      renderQuestions();
+      document.getElementById('app').scrollIntoView({behavior:'smooth', block:'start'});
+    }
+  }
+
+  function prevPage(){
+    const errorElement = document.getElementById('error-message');
+    errorElement.classList.add('hidden');
+    clearPageMissing();
+
+    if (page > 0){
+      page--;
+      renderQuestions();
+      document.getElementById('app').scrollIntoView({behavior:'smooth', block:'start'});
+    }
+  }
+
+  // =========================
+  // РЕЗУЛЬТАТИ
+  // =========================
   function sortScores(results){
     return Object.keys(results).map(k=>({key:k, score:results[k]})).sort((a,b)=>b.score-a.score);
   }
@@ -570,6 +714,34 @@
     `;
   }
 
+  function calculateResults(){
+    // перед фіналом перевіримо останню сторінку
+    if (!validateCurrentPage()) return;
+
+    // якщо десь раніше теж лишилися null (теоретично), не дозволяємо
+    const anyMissing = answers.some(v => v === null);
+    if (anyMissing){
+      // знайдемо перше пропущене і повернемось на той екран
+      const firstMissing = answers.findIndex(v => v === null);
+      page = Math.floor(firstMissing / PER_PAGE);
+      renderQuestions();
+      document.getElementById('error-message').classList.remove('hidden');
+      const block = document.querySelector(`.question-block[data-qindex="${firstMissing}"]`);
+      block?.classList.add('missing');
+      block?.scrollIntoView({behavior:'smooth', block:'center'});
+      return;
+    }
+
+    const results = emptyScores();
+    for (let i=0;i<testData.length;i++){
+      const optIndex = answers[i];
+      const scoreObj = testData[i].options[optIndex].score;
+      Object.keys(scoreObj).forEach(k => results[k] += scoreObj[k]);
+    }
+
+    displayResults(results);
+  }
+
   function displayResults(results){
     const total = testData.length;
     const sorted = sortScores(results);
@@ -585,7 +757,10 @@
 
     const resultsContainer = document.getElementById('results-container');
     const testContainer = document.getElementById('test-container');
-    const submitButton = document.getElementById('submit-button');
+    const progressWrap = document.getElementById('progress-wrap');
+
+    // сховати навігацію
+    document.querySelector('.sticky.bottom-3')?.classList.add('hidden');
 
     resultsSummary.innerHTML = sorted.map(item=>{
       const k=item.key;
@@ -636,25 +811,30 @@
     }
 
     testContainer.classList.add('hidden');
-    submitButton.classList.add('hidden');
+    progressWrap.classList.add('hidden');
     resultsContainer.classList.remove('hidden');
     resultsContainer.scrollIntoView({behavior:'smooth', block:'start'});
   }
 
   function resetTest(){
-    const resultsContainer=document.getElementById('results-container');
-    const testContainer=document.getElementById('test-container');
-    const submitButton=document.getElementById('submit-button');
-    const errorElement=document.getElementById('error-message');
+    // скинути все
+    for (let i=0;i<answers.length;i++) answers[i]=null;
+    page = 0;
 
-    document.querySelectorAll('input[type="radio"]').forEach(r=>r.checked=false);
-    document.querySelectorAll('.question-block').forEach(b=>b.classList.remove('missing'));
-    errorElement.classList.add('hidden');
+    // показати навігацію назад
+    document.querySelector('.sticky.bottom-3')?.classList.remove('hidden');
 
-    resultsContainer.classList.add('hidden');
-    testContainer.classList.remove('hidden');
-    submitButton.classList.remove('hidden');
+    // сховати результати
+    document.getElementById('results-container').classList.add('hidden');
 
+    // показати тест і прогрес
+    document.getElementById('test-container').classList.remove('hidden');
+    document.getElementById('progress-wrap').classList.remove('hidden');
+
+    // прибрати помилки
+    document.getElementById('error-message').classList.add('hidden');
+
+    renderQuestions();
     document.getElementById('app').scrollIntoView({behavior:'smooth', block:'start'});
   }
 
